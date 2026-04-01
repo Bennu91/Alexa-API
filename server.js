@@ -72,7 +72,7 @@ app.listen(PORT, () => {
 });
 
 // Add custom media handlers
-const fetch = require('node-fetch');
+//const fetch = require('node-fetch');
 
 app.post('/control', async (req, res) => {
     try {
