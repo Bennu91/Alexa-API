@@ -73,23 +73,25 @@ app.listen(PORT, () => {
 
 // Add custom media handlers
 // server.js
+// server.js - versione pronta all'uso
 const express = require('express');
 const app = express();
 app.use(express.json());
 
 const PORT = 3000;
 
-// Lista dispositivi
+// Lista dispositivi Alexa
 const devices = {
     "salotto": "media_player.echo_salotto",
     "camera": "media_player.echo_camera_da_letto",
     "ovunque": "media_player.ovunque"
 };
 
+// Endpoint per comandi play/pause/next/previous
 app.post('/control', async (req, res) => {
     try {
-        const command = req.body.command;
-        const deviceKey = req.body.device || "salotto"; // default salotto
+        const command = req.body.command; // play, pause, play_pause, next, previous
+        const deviceKey = req.body.device || "salotto"; // default: salotto
         const entity_id = devices[deviceKey];
 
         if (!entity_id) return res.status(400).json({ error: "Dispositivo non valido" });
@@ -100,6 +102,7 @@ app.post('/control', async (req, res) => {
         if (command === "play_pause") service = "media_play_pause";
         if (command === "next") service = "media_next_track";
         if (command === "previous") service = "media_previous_track";
+
         if (!service) return res.status(400).json({ error: "Comando non valido" });
 
         // Chiamata a Home Assistant
@@ -123,6 +126,7 @@ app.post('/control', async (req, res) => {
     }
 });
 
+// Avvio server
 app.listen(PORT, () => {
-    console.log(`Server Alexa API in ascolto su porta ${PORT}`);
+    console.log(`Server Alexa API personalizzato in ascolto su porta ${PORT}`);
 });
