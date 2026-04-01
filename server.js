@@ -70,3 +70,45 @@ app.get('/ma/latest-url', (req, res) => {
 app.listen(PORT, () => {
   console.log(`MA-Alexa API running on port ${PORT}`);
 });
+
+// Add custom media handlers
+const fetch = require('node-fetch');
+
+app.post('/control', async (req, res) => {
+    try {
+        const command = req.body.command;
+        const device = req.body.device || "media_player.echo_salotto";
+
+        let service = "";
+
+        if (command === "pause") service = "media_pause";
+        if (command === "play") service = "media_play";
+        if (command === "play_pause") service = "media_play_pause";
+        if (command === "next") service = "media_next_track";
+        if (command === "previous") service = "media_previous_track";
+
+        if (!service) {
+            return res.status(400).json({ error: "Invalid command" });
+        }
+
+        const response = await fetch("http://192.168.1.144:8123/api/services/media_player/" + service, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmZDRiNmFlYjI2ZmE0ZDUxYTdkMTczMDI5YTY2MmFkOSIsImlhdCI6MTc3NTA1MzY2OCwiZXhwIjoyMDkwNDEzNjY4fQ.Njdnc5Fnkz1h3Z-gs2t5Jkh5aDYUyCWdv0HV5Cpv7FU",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                entity_id: device
+            })
+        });
+
+        const result = await response.text();
+        console.log("HA RESPONSE:", result);
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error("ERROR:", err);
+        res.status(500).json({ error: err.toString() });
+    }
+});
