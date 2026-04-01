@@ -88,45 +88,61 @@ const devices = {
 };
 
 // Endpoint per comandi play/pause/next/previous
+// server.js
+import express from 'express';
+import fetch from 'node-fetch';
+
+const app = express();
+app.use(express.json());
+
+const PORT = 3000;
+
+// Lista dispositivi Alexa
+const devices = {
+  salotto: "media_player.echo_salotto",
+  camera: "media_player.echo_camera_da_letto",
+  ovunque: "media_player.ovunque"
+};
+
+// Endpoint per controllare i dispositivi
 app.post('/control', async (req, res) => {
-    try {
-        const command = req.body.command; // play, pause, play_pause, next, previous
-        const deviceKey = req.body.device || "salotto"; // default: salotto
-        const entity_id = devices[deviceKey];
+  try {
+    const { command, device = "salotto" } = req.body;
+    const entity_id = devices[device];
 
-        if (!entity_id) return res.status(400).json({ error: "Dispositivo non valido" });
+    if (!entity_id) return res.status(400).json({ error: "Dispositivo non valido" });
 
-        let service = "";
-        if (command === "pause") service = "media_pause";
-        if (command === "play") service = "media_play";
-        if (command === "play_pause") service = "media_play_pause";
-        if (command === "next") service = "media_next_track";
-        if (command === "previous") service = "media_previous_track";
-
-        if (!service) return res.status(400).json({ error: "Comando non valido" });
-
-        // Chiamata a Home Assistant
-        const response = await fetch("http://192.168.1.144:8123/api/services/media_player/" + service, {
-            method: "POST",
-            headers: {
-                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmZDRiNmFlYjI2ZmE0ZDUxYTdkMTczMDI5YTY2MmFkOSIsImlhdCI6MTc3NTA1MzY2OCwiZXhwIjoyMDkwNDEzNjY4fQ.Njdnc5Fnkz1h3Z-gs2t5Jkh5aDYUyCWdv0HV5Cpv7FU",
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ entity_id })
-        });
-
-        const result = await response.text();
-        console.log("HA RESPONSE:", result);
-
-        res.json({ success: true });
-
-    } catch (err) {
-        console.error("ERROR:", err);
-        res.status(500).json({ error: err.toString() });
+    let service = "";
+    switch(command) {
+      case "pause": service = "media_pause"; break;
+      case "play": service = "media_play"; break;
+      case "play_pause": service = "media_play_pause"; break;
+      case "next": service = "media_next_track"; break;
+      case "previous": service = "media_previous_track"; break;
+      default: return res.status(400).json({ error: "Comando non valido" });
     }
+
+    const response = await fetch(`http://192.168.1.144:8123/api/services/media_player/${service}`, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmZDRiNmFlYjI2ZmE0ZDUxYTdkMTczMDI5YTY2MmFkOSIsImlhdCI6MTc3NTA1MzY2OCwiZXhwIjoyMDkwNDEzNjY4fQ.Njdnc5Fnkz1h3Z-gs2t5Jkh5aDYUyCWdv0HV5Cpv7FU",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ entity_id })
+    });
+
+    const result = await response.text();
+    console.log("HA RESPONSE:", result);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("ERROR:", err);
+    res.status(500).json({ error: err.toString() });
+  }
 });
 
 // Avvio server
 app.listen(PORT, () => {
-    console.log(`Server Alexa API personalizzato in ascolto su porta ${PORT}`);
+  console.log(`Server Alexa API in ascolto su porta ${PORT}`);
 });
