@@ -77,7 +77,12 @@ app.listen(PORT, () => {
 app.post('/control', async (req, res) => {
     try {
         const command = req.body.command;
-        const device = req.body.device || "media_player.echo_salotto";
+        const deviceKey = req.body.device || "salotto"; // default se non specificato
+        const entity_id = devices[deviceKey];
+
+        if (!entity_id) {
+            return res.status(400).json({ error: "Dispositivo non valido" });
+        }
 
         let service = "";
 
