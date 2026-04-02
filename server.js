@@ -25,6 +25,12 @@ let lastIntent = null;
 if (USERNAME !== undefined && PASSWORD !== undefined) {
   console.log(`auth activated`);
   app.use((req, res, next) => {
+
+    // 🔥 ESCLUSIONE CORRETTA
+    if (req.originalUrl.startsWith('/alexa')) {
+      return next();
+    }
+
     const credentials = auth(req);
 
     if (
