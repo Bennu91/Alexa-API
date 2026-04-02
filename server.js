@@ -63,7 +63,7 @@ app.get('/ma/latest-url', (req, res) => {
 });
 
 // --- Ricezione intent da Music Assistant SENZA auth ---
-app.post('/alexa/intents', (req, res) => {
+app.post(['/alexa/intents', '/alexa/intents/'], (req, res) => {
   const { intent, slots } = req.body;
 
   if (!intent) return res.status(400).json({ error: 'Missing intent' });
@@ -71,10 +71,11 @@ app.post('/alexa/intents', (req, res) => {
   lastIntent = { intent, slots };
   console.log('Received intent from MA:', lastIntent);
 
-  // Qui puoi implementare eventuali callback per la skill
-  // Es: salvare intent, triggerare azioni locali, ecc.
-
   res.json({ status: 'ok' });
+});
+
+app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
+    res.status(405).send('Use POST for intents');
 });
 
 // --- Facoltativo: endpoint per leggere l'ultimo intent (debug) ---
