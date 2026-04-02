@@ -34,6 +34,15 @@ if (USERNAME && PASSWORD) {
   });
 }
 
+app.all(['/alexa/intents', '/alexa/intents/'], (req, res) => {
+  console.log("METHOD:", req.method);
+  console.log("HEADERS:", req.headers);
+  console.log("BODY:", req.body);
+  console.log("QUERY:", req.query);
+
+  res.json({ debug: "ok" });
+});
+
 // POST endpoint for Music Assistant to push URL and metadata
 app.post('/ma/push-url', (req, res) => {
   const { streamUrl, title, artist, album, imageUrl } = req.body;
