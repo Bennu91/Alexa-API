@@ -22,26 +22,14 @@ app.use(bodyParser.json());
 let obj = null;
 let lastIntent = null;
 
-if (USERNAME !== undefined && PASSWORD !== undefined) {
-  console.log(`auth activated`);
-  app.use((req, res, next) => {
-
-    // 🔥 ESCLUSIONE CORRETTA
-    if (req.originalUrl.startsWith('/alexa')) {
-      return next();
-    }
-
+// --- Autenticazione solo per /ma/latest-url ---
+if (USERNAME && PASSWORD) {
+  app.use('/ma/latest-url', (req, res, next) => {
     const credentials = auth(req);
-
-    if (
-      !credentials ||
-      credentials.name !== USERNAME ||
-      credentials.pass !== PASSWORD
-    ) {
+    if (!credentials || credentials.name !== USERNAME || credentials.pass !== PASSWORD) {
       res.set('WWW-Authenticate', 'Basic realm="music-assistant-alexa-api"');
       return res.status(401).send('Access denied');
     }
-
     next();
   });
 }
@@ -74,30 +62,24 @@ app.get('/ma/latest-url', (req, res) => {
   });
 });
 
-// POST endpoint per ricevere intent (play, pause, next, ecc.)
+// --- Ricezione intent da Music Assistant SENZA auth ---
 app.post('/alexa/intents', (req, res) => {
   const { intent, slots } = req.body;
 
-  if (!intent) {
-    return res.status(400).json({ error: 'Missing intent' });
-  }
+  if (!intent) return res.status(400).json({ error: 'Missing intent' });
 
-  lastIntent = {
-    intent,
-    slots: slots || {}
-  };
+  lastIntent = { intent, slots };
+  console.log('Received intent from MA:', lastIntent);
 
-  console.log('Received intent:', lastIntent);
+  // Qui puoi implementare eventuali callback per la skill
+  // Es: salvare intent, triggerare azioni locali, ecc.
 
   res.json({ status: 'ok' });
 });
 
-// GET endpoint per Alexa skill per leggere ultimo intent
+// --- Facoltativo: endpoint per leggere l'ultimo intent (debug) ---
 app.get('/alexa/latest-intent', (req, res) => {
-  if (!lastIntent) {
-    return res.status(404).json({ error: 'No intent available' });
-  }
-
+  if (!lastIntent) return res.status(404).json({ error: 'No intent received' });
   res.json(lastIntent);
 });
 
