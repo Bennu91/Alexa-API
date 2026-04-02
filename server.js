@@ -74,10 +74,6 @@ app.post(['/alexa/intents', '/alexa/intents/'], (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
-    res.status(405).send('Use POST for intents');
-});
-
 // --- Facoltativo: endpoint per leggere l'ultimo intent (debug) ---
 // Proxy per MA: accetta GET e lo trasforma in POST
 app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
