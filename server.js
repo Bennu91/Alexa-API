@@ -79,9 +79,24 @@ app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
 });
 
 // --- Facoltativo: endpoint per leggere l'ultimo intent (debug) ---
-app.get('/alexa/latest-intent', (req, res) => {
-  if (!lastIntent) return res.status(404).json({ error: 'No intent received' });
-  res.json(lastIntent);
+// Proxy per MA: accetta GET e lo trasforma in POST
+app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
+  const intent = req.query.intent;
+  const slots = req.query.slots ? JSON.parse(req.query.slots) : {};
+
+  if (!intent) return res.status(400).json({ error: 'Missing intent' });
+
+  // Chiama il POST interno
+  const postReq = {
+    body: { intent, slots }
+  };
+
+  // Usa lo stesso handler del POST
+  app._router.handle(
+    { ...req, method: 'POST', body: postReq.body },
+    res,
+    () => {}
+  );
 });
 
 app.listen(PORT, () => {
