@@ -20,6 +20,7 @@ process.on('SIGTERM', () => {
 app.use(bodyParser.json());
 
 let obj = null;
+let lastIntent = null;
 
 if (USERNAME !== undefined && PASSWORD !== undefined) {
   console.log(`auth activated`);
@@ -65,6 +66,33 @@ app.get('/ma/latest-url', (req, res) => {
     album: obj.album,
     imageUrl: obj.imageUrl,
   });
+});
+
+// POST endpoint per ricevere intent (play, pause, next, ecc.)
+app.post('/alexa/intents', (req, res) => {
+  const { intent, slots } = req.body;
+
+  if (!intent) {
+    return res.status(400).json({ error: 'Missing intent' });
+  }
+
+  lastIntent = {
+    intent,
+    slots: slots || {}
+  };
+
+  console.log('Received intent:', lastIntent);
+
+  res.json({ status: 'ok' });
+});
+
+// GET endpoint per Alexa skill per leggere ultimo intent
+app.get('/alexa/latest-intent', (req, res) => {
+  if (!lastIntent) {
+    return res.status(404).json({ error: 'No intent available' });
+  }
+
+  res.json(lastIntent);
 });
 
 app.listen(PORT, () => {
