@@ -6,25 +6,41 @@ const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.USERNAME;
 const PASSWORD = process.env.PASSWORD;
 
-// ================= LOGGER =================
+// ================= RAW BODY (FONDAMENTALE) =================
 
-function logRequest(req) {
-  console.log("=======================================");
-  console.log("TIME:", new Date().toISOString());
-  console.log("METHOD:", req.method);
-  console.log("URL:", req.originalUrl);
-  console.log("HEADERS:", JSON.stringify(req.headers, null, 2));
-  console.log("QUERY:", JSON.stringify(req.query, null, 2));
-  console.log("BODY:", req.rawBody || req.body);
-  console.log("=======================================\n");
-}
-
-// Middleware per salvare raw body
 app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
   }
 }));
+
+app.use(express.urlencoded({
+  extended: true,
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+
+// ================= LOGGER SUPER DETTAGLIATO =================
+
+function logRequest(req) {
+  console.log("\n================= REQUEST =================");
+  console.log("TIME:", new Date().toISOString());
+  console.log("IP:", req.ip);
+  console.log("METHOD:", req.method);
+  console.log("URL:", req.originalUrl);
+  console.log("HEADERS:\n", JSON.stringify(req.headers, null, 2));
+  console.log("QUERY:\n", JSON.stringify(req.query, null, 2));
+  console.log("BODY PARSED:\n", JSON.stringify(req.body, null, 2));
+  console.log("BODY RAW:\n", req.rawBody);
+  console.log("===========================================\n");
+}
+
+// 🔥 LOGGA TUTTE LE RICHIESTE (anche quelle che non matchano route)
+app.use((req, res, next) => {
+  logRequest(req);
+  next();
+});
 
 // ================= VAR =================
 
@@ -47,28 +63,24 @@ if (USERNAME && PASSWORD) {
   });
 }
 
-// ================= INTENTS DEBUG =================
+// ================= INTENTS =================
 
-// 🔥 intercetta QUALSIASI chiamata
-app.all(['/alexa/intents', '/alexa/intents/'], (req, res, next) => {
-  logRequest(req);
-  next();
-});
+// 🔥 QUALSIASI METODO (GET, POST, PUT, ecc)
+app.all(['/alexa/intents', '/alexa/intents/'], (req, res) => {
 
-// POST vero
-app.post(['/alexa/intents', '/alexa/intents/'], (req, res) => {
   let intent = null;
   let slots = {};
 
-  // supporta vari formati
+  // prova body
   if (req.body && typeof req.body === 'object') {
     intent = req.body.intent || req.body.name || null;
     slots = req.body.slots || {};
   }
 
-  // fallback GET-style
+  // fallback query
   if (!intent && req.query.intent) {
     intent = req.query.intent;
+
     try {
       slots = req.query.slots ? JSON.parse(req.query.slots) : {};
     } catch {
@@ -77,52 +89,33 @@ app.post(['/alexa/intents', '/alexa/intents/'], (req, res) => {
   }
 
   if (!intent) {
-    console.log("⚠️ INTENT NON TROVATO");
-    return res.status(400).json({ error: 'Missing intent' });
+    console.log("⚠️ NESSUN INTENT TROVATO");
+    return res.status(200).json({ status: 'no_intent_but_logged' });
   }
 
-  lastIntent = { intent, slots, time: Date.now() };
+  lastIntent = {
+    intent,
+    slots,
+    time: new Date().toISOString(),
+    method: req.method
+  };
+
   intentHistory.push(lastIntent);
+  if (intentHistory.length > 50) intentHistory.shift();
 
-  // tieni solo ultimi 20
-  if (intentHistory.length > 20) intentHistory.shift();
-
-  console.log("✅ INTENT SALVATO:", lastIntent);
+  console.log("✅ INTENT RICEVUTO:", lastIntent);
 
   res.json({ status: 'ok' });
 });
 
-// GET fallback (Music Assistant rompe le regole 😅)
-app.get(['/alexa/intents', '/alexa/intents/'], (req, res) => {
-  logRequest(req);
+// ================= DEBUG =================
 
-  const intent = req.query.intent;
-
-  if (!intent) {
-    return res.status(400).json({ error: 'Missing intent' });
-  }
-
-  let slots = {};
-  try {
-    slots = req.query.slots ? JSON.parse(req.query.slots) : {};
-  } catch {}
-
-  lastIntent = { intent, slots, time: Date.now() };
-  intentHistory.push(lastIntent);
-
-  if (intentHistory.length > 20) intentHistory.shift();
-
-  console.log("✅ INTENT (GET) SALVATO:", lastIntent);
-
-  res.json({ status: 'ok' });
-});
-
-// endpoint debug
+// ultimo intent
 app.get('/alexa/latest-intent', (req, res) => {
   res.json(lastIntent || {});
 });
 
-// storico
+// storico completo
 app.get('/alexa/intents/history', (req, res) => {
   res.json(intentHistory);
 });
@@ -130,17 +123,17 @@ app.get('/alexa/intents/history', (req, res) => {
 // ================= STREAM =================
 
 app.post('/ma/push-url', (req, res) => {
-  logRequest(req);
 
   const { streamUrl, title, artist, album, imageUrl } = req.body;
 
   if (!streamUrl) {
-    return res.status(400).json({ error: 'Missing required fields' });
+    console.log("❌ STREAM NON VALIDO");
+    return res.status(400).json({ error: 'Missing streamUrl' });
   }
 
   obj = { streamUrl, title, artist, album, imageUrl };
 
-  console.log("🎵 STREAM AGGIORNATO:", obj);
+  console.log("🎵 STREAM SALVATO:", obj);
 
   res.json({ status: 'ok' });
 });
@@ -153,8 +146,16 @@ app.get('/ma/latest-url', (req, res) => {
   res.json(obj);
 });
 
+// ================= CATCH ALL (IMPORTANTISSIMO) =================
+
+// 🔥 intercetta QUALSIASI altra chiamata (tipo quelle che ora perdi)
+app.use((req, res) => {
+  console.log("⚠️ ROUTE NON GESTITA:", req.method, req.originalUrl);
+  res.status(404).json({ error: 'Not found but logged' });
+});
+
 // ================= START =================
 
 app.listen(PORT, () => {
-  console.log(`🚀 MA-Alexa API running on port ${PORT}`);
+  console.log(`🚀 DEBUG API attiva sulla porta ${PORT}`);
 });
