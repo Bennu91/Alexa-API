@@ -1,6 +1,5 @@
 const express = require('express');
 const auth = require('basic-auth');
-const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +9,7 @@ const PASSWORD = process.env.PASSWORD;
 // ================= CONFIG HOME ASSISTANT =================
 
 const HA_URL = 'https://valegabry.duckdns.org';
-const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIwNzQ0ZTdkNGM1YTc0NDA0OTgxYzY2YTkwMTRmM2I1MSIsImlhdCI6MTc3NTU3MDUwNy,"exp":2090930507}.lz3AYTwCGQ6BTfQaK-8lDRpBjf-YKWss-Sr-oFsph0Y';
+const HA_TOKEN = 'METTI_IL_TUO_TOKEN_CORRETTO';
 
 // ================= RAW BODY =================
 
@@ -35,9 +34,7 @@ function logRequest(req) {
   console.log("IP:", req.ip);
   console.log("METHOD:", req.method);
   console.log("URL:", req.originalUrl);
-  console.log("HEADERS:\n", JSON.stringify(req.headers, null, 2));
-  console.log("BODY PARSED:\n", JSON.stringify(req.body, null, 2));
-  console.log("BODY RAW:\n", req.rawBody);
+  console.log("BODY:\n", JSON.stringify(req.body, null, 2));
   console.log("===========================================\n");
 }
 
@@ -52,7 +49,6 @@ let obj = null;
 
 // ================= FUNZIONI =================
 
-// Estrae stanza da streamUrl
 function extractRoomFromStream(url) {
   try {
     const match = url.match(/flow\/[^/]+\/([^/]+)\//i);
@@ -64,12 +60,10 @@ function extractRoomFromStream(url) {
   return "soggiorno";
 }
 
-// Costruisce entity Alexa
 function buildAlexaEntity(room) {
   return `media_player.${room}_2`;
 }
 
-// Rileva provider da imageUrl
 function detectProvider(imageUrl) {
   if (!imageUrl) return "Spotify";
 
@@ -82,9 +76,7 @@ function detectProvider(imageUrl) {
   return "Spotify";
 }
 
-// Costruisce comando Alexa
 function buildAlexaCommand(title, artist, imageUrl) {
-
   const provider = detectProvider(imageUrl);
 
   if (title && artist) {
@@ -98,7 +90,7 @@ function buildAlexaCommand(title, artist, imageUrl) {
   return null;
 }
 
-// ================= AUTH SOLO STREAM =================
+// ================= AUTH =================
 
 if (USERNAME && PASSWORD) {
   app.use('/ma/latest-url', (req, res, next) => {
@@ -113,7 +105,7 @@ if (USERNAME && PASSWORD) {
   });
 }
 
-// ================= STREAM + PLAY ALEXA =================
+// ================= STREAM + PLAY =================
 
 app.post('/ma/push-url', async (req, res) => {
 
@@ -128,15 +120,12 @@ app.post('/ma/push-url', async (req, res) => {
 
   console.log("🎵 STREAM SALVATO:", obj);
 
-  // Estrazione stanza
   const room = extractRoomFromStream(streamUrl);
   const alexaDevice = buildAlexaEntity(room);
-
-  // Costruzione comando
   const command = buildAlexaCommand(title, artist, imageUrl);
 
   console.log(`➡️ Stanza: ${room}`);
-  console.log(`➡️ Device Alexa: ${alexaDevice}`);
+  console.log(`➡️ Device: ${alexaDevice}`);
   console.log(`➡️ Comando: ${command}`);
 
   if (!command) {
@@ -145,27 +134,27 @@ app.post('/ma/push-url', async (req, res) => {
 
   try {
 
-    await axios.post(
-      `${HA_URL}/api/services/media_player/play_media`,
-      {
+    const response = await fetch(`${HA_URL}/api/services/media_player/play_media`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${HA_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
         entity_id: alexaDevice,
         media_content_type: "custom",
         media_content_id: `Alexa, ${command}`
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${HA_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+      })
+    });
 
-    console.log("✅ PLAY INVIATO AD ALEXA");
+    const data = await response.text();
+
+    console.log("✅ RISPOSTA HA:", data);
 
     res.json({ status: 'ok' });
 
   } catch (err) {
-    console.error("❌ ERRORE HOME ASSISTANT:", err.response?.data || err.message);
+    console.error("❌ ERRORE:", err.message);
     res.status(500).json({ error: 'Home Assistant error' });
   }
 });
@@ -183,7 +172,7 @@ app.get('/ma/latest-url', (req, res) => {
 
 app.use((req, res) => {
   console.log("⚠️ ROUTE NON GESTITA:", req.method, req.originalUrl);
-  res.status(404).json({ error: 'Not found but logged' });
+  res.status(404).json({ error: 'Not found' });
 });
 
 // ================= START =================
