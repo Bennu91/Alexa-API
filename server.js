@@ -146,7 +146,7 @@ app.post('/ma/push-url', async (req, res) => {
       body: JSON.stringify({
         entity_id: alexaDevice,
         media_content_type: "custom",
-        media_content_id: `Alexa, ${command}`
+        media_content_id: '${command}`
       })
     });
 
