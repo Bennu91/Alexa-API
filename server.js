@@ -3,13 +3,11 @@ const auth = require('basic-auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const USERNAME = process.env.USERNAME;
-const PASSWORD = process.env.PASSWORD;
 
-// ================= CONFIG HOME ASSISTANT =================
+// ================= CONFIG =================
 
 const HA_URL = 'https://valegabry.duckdns.org';
-const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2ZWNlNjZhMDBjZmI0MTEwODVmYzNlN2M2Zjc2NThhNCIsImlhdCI6MTc3NTU3MTgyMSwiZXhwIjoyMDkwOTMxODIxfQ.mGSOL4OkyKngE_-vqihg4OhAb12M-sa6C9j3PHPqduU'; // 🔥 RIMETTILO
+const HA_TOKEN = 'INCOLLA_TOKEN_CORRETTO';
 
 // ================= RAW BODY =================
 
@@ -19,6 +17,7 @@ app.use(express.json({
   }
 }));
 
+// 🔥 QUESTO ERA IL PROBLEMA
 app.use(express.urlencoded({
   extended: true,
   verify: (req, res, buf) => {
@@ -28,58 +27,42 @@ app.use(express.urlencoded({
 
 // ================= LOGGER =================
 
-function logRequest(req) {
+app.use((req, res, next) => {
   console.log("\n================= REQUEST =================");
   console.log("TIME:", new Date().toISOString());
-  console.log("URL:", req.originalUrl);
-  console.log("BODY:\n", JSON.stringify(req.body, null, 2));
+  console.log("BODY PARSED:\n", JSON.stringify(req.body, null, 2));
+  console.log("BODY RAW:\n", req.rawBody);
   console.log("===========================================\n");
-}
-
-app.use((req, res, next) => {
-  logRequest(req);
   next();
 });
 
-// ================= VAR =================
-
-let obj = null;
-
 // ================= FUNZIONI =================
 
-// 🔥 Estrae stanza
 function extractRoomFromStream(url) {
   try {
     const match = url.match(/flow\/[^/]+\/([^/]+)\//i);
-    if (match && match[1]) {
-      return match[1];
-    }
-  } catch (e) {}
-
-  return "soggiorno";
+    if (match && match[1]) return match[1];
+  } catch {}
+  return null;
 }
 
-// 🔥 NORMALIZZA (QUESTO RISOLVE IL TUO PROBLEMA)
 function normalizeName(name) {
   return name
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '_')     // spazi → _
-    .replace(/[^\w_]/g, '');  // rimuove caratteri strani
+    .replace(/\s+/g, '_')
+    .replace(/[^\w_]/g, '');
 }
 
-// 🔥 Costruisce entity Alexa
 function buildAlexaEntity(roomRaw) {
   const room = normalizeName(roomRaw);
   return `media_player.${room}_2`;
 }
 
-// 🔥 Provider
 function detectProvider(imageUrl) {
   if (!imageUrl) return "Spotify";
 
   const url = imageUrl.toLowerCase();
-
   if (url.includes("apple_music")) return "Apple Music";
   if (url.includes("spotify")) return "Spotify";
   if (url.includes("amazon")) return "Amazon Music";
@@ -87,50 +70,70 @@ function detectProvider(imageUrl) {
   return "Spotify";
 }
 
-// 🔥 Comando Alexa
+// 🔥 FIX IMPORTANTE: prova anche RAW BODY
+function extractMetadata(req) {
+
+  let { title, artist, album, imageUrl } = req.body || {};
+
+  // fallback su raw JSON se parsing fallisce
+  if ((!title || !artist) && req.rawBody) {
+    try {
+      const raw = JSON.parse(req.rawBody);
+      title = title || raw.title;
+      artist = artist || raw.artist;
+      album = album || raw.album;
+      imageUrl = imageUrl || raw.imageUrl;
+    } catch {}
+  }
+
+  return { title, artist, album, imageUrl };
+}
+
 function buildAlexaCommand(title, artist, imageUrl) {
+
+  if (!title || !artist) {
+    console.log("❌ METADATA MANCANTI → NON INVIO NULLA");
+    return null;
+  }
 
   const provider = detectProvider(imageUrl);
 
-  if (title && artist) {
-    return `riproduci ${title} di ${artist} su ${provider}`;
-  }
-
-  if (title) {
-    return `riproduci ${title} su ${provider}`;
-  }
-
-  return null;
+  return `riproduci ${title} di ${artist} su ${provider}`;
 }
 
-// ================= STREAM + PLAY =================
+// ================= MAIN =================
 
 app.post('/ma/push-url', async (req, res) => {
 
-  const { streamUrl, title, artist, album, imageUrl } = req.body;
+  const { streamUrl } = req.body;
 
   if (!streamUrl) {
-    console.log("❌ STREAM NON VALIDO");
     return res.status(400).json({ error: 'Missing streamUrl' });
   }
 
-  obj = { streamUrl, title, artist, album, imageUrl };
+  // 🔥 estrai metadata in modo robusto
+  const { title, artist, album, imageUrl } = extractMetadata(req);
 
-  console.log("🎵 STREAM SALVATO:", obj);
+  console.log("🎵 METADATA:", { title, artist, album });
 
-  // 🔥 ESTRAZIONE + NORMALIZZAZIONE
+  // 🔥 se manca metadata → STOP (no musica random)
+  if (!title || !artist) {
+    console.log("⛔ BLOCCATO: metadata incompleti");
+    return res.json({ status: 'ignored_no_metadata' });
+  }
+
   const roomRaw = extractRoomFromStream(streamUrl);
-  const alexaDevice = buildAlexaEntity(roomRaw);
 
+  if (!roomRaw) {
+    console.log("❌ impossibile estrarre stanza");
+    return res.status(400).json({ error: 'No room' });
+  }
+
+  const alexaDevice = buildAlexaEntity(roomRaw);
   const command = buildAlexaCommand(title, artist, imageUrl);
 
-  console.log(`➡️ Stanza RAW: ${roomRaw}`);
-  console.log(`➡️ Device Alexa: ${alexaDevice}`);
+  console.log(`➡️ Device: ${alexaDevice}`);
   console.log(`➡️ Comando: ${command}`);
-
-  if (!command) {
-    return res.status(400).json({ error: 'Cannot build command' });
-  }
 
   try {
 
@@ -149,24 +152,15 @@ app.post('/ma/push-url', async (req, res) => {
 
     const text = await response.text();
 
-    console.log(`📡 STATUS HA: ${response.status}`);
-    console.log("📡 RISPOSTA HA:", text);
+    console.log(`📡 STATUS: ${response.status}`);
+    console.log("📡 RISPOSTA:", text);
 
-    res.json({ status: 'ok', ha_status: response.status });
+    res.json({ status: 'ok' });
 
   } catch (err) {
     console.error("❌ ERRORE:", err.message);
-    res.status(500).json({ error: 'Home Assistant error' });
+    res.status(500).json({ error: 'HA error' });
   }
-});
-
-// ================= DEBUG =================
-
-app.get('/ma/latest-url', (req, res) => {
-  if (!obj) {
-    return res.status(404).json({ error: 'No URL available' });
-  }
-  res.json(obj);
 });
 
 // ================= START =================
