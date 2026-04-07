@@ -8,6 +8,11 @@ const PORT = process.env.PORT || 3000;
 const HA_URL = 'https://valegabry.duckdns.org';
 const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI0ZWYyNDE2NTZiODI0ZTJiYmIwYTU3NDhiNDRiODRjYiIsImlhdCI6MTc3NTU4ODY3MiwiZXhwIjoyMDkwOTQ4NjcyfQ.Bh8qH8Sy9C08KJ5VAdpJ2Q_Mlo1cokkss8ggAq1Jnl4';
 
+// ================= STATO (ANTI-DOPPIE CHIAMATE) =================
+
+let lastTrack = null;
+let lastTime = 0;
+
 // ================= BODY =================
 
 app.use(express.json({
@@ -83,10 +88,23 @@ app.post('/ma/push-url', async (req, res) => {
 
   console.log("🎵 DATI:", { title, artist });
 
-  if (!title || !artist) {
-    console.log("⛔ metadata mancanti → NON faccio nulla");
-    return res.json({ status: 'ignored' });
-  }
+  // 🔥 BLOCCO RICHIESTE SENZA METADATA (PRIMA CHIAMATA DI MA)
+if (!title || !artist) {
+  console.log("⛔ ignorata richiesta senza metadata");
+  return res.status(204).end(); // ancora più pulito
+}
+
+// 🔥 BLOCCO DUPLICATI (MA spesso manda doppio)
+const now = Date.now();
+const trackId = `${title}_${artist}`;
+
+if (lastTrack === trackId && (now - lastTime < 3000)) {
+  console.log("⛔ duplicato ignorato");
+  return res.status(204).end();
+}
+
+lastTrack = trackId;
+lastTime = now;
 
   const roomRaw = extractRoomFromStream(streamUrl);
   const alexaDevice = buildAlexaEntity(roomRaw);
