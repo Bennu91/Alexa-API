@@ -9,7 +9,7 @@ const PASSWORD = process.env.PASSWORD;
 // ================= CONFIG HOME ASSISTANT =================
 
 const HA_URL = 'https://valegabry.duckdns.org';
-const HA_TOKEN = 'METTI_IL_TUO_TOKEN_CORRETTO';
+const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2ZWNlNjZhMDBjZmI0MTEwODVmYzNlN2M2Zjc2NThhNCIsImlhdCI6MTc3NTU3MTgyMSwiZXhwIjoyMDkwOTMxODIxfQ.mGSOL4OkyKngE_-vqihg4OhAb12M-sa6C9j3PHPqduU'; // 🔥 RIMETTILO
 
 // ================= RAW BODY =================
 
@@ -31,8 +31,6 @@ app.use(express.urlencoded({
 function logRequest(req) {
   console.log("\n================= REQUEST =================");
   console.log("TIME:", new Date().toISOString());
-  console.log("IP:", req.ip);
-  console.log("METHOD:", req.method);
   console.log("URL:", req.originalUrl);
   console.log("BODY:\n", JSON.stringify(req.body, null, 2));
   console.log("===========================================\n");
@@ -49,21 +47,34 @@ let obj = null;
 
 // ================= FUNZIONI =================
 
+// 🔥 Estrae stanza
 function extractRoomFromStream(url) {
   try {
     const match = url.match(/flow\/[^/]+\/([^/]+)\//i);
     if (match && match[1]) {
-      return match[1].toLowerCase();
+      return match[1];
     }
   } catch (e) {}
 
   return "soggiorno";
 }
 
-function buildAlexaEntity(room) {
+// 🔥 NORMALIZZA (QUESTO RISOLVE IL TUO PROBLEMA)
+function normalizeName(name) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')     // spazi → _
+    .replace(/[^\w_]/g, '');  // rimuove caratteri strani
+}
+
+// 🔥 Costruisce entity Alexa
+function buildAlexaEntity(roomRaw) {
+  const room = normalizeName(roomRaw);
   return `media_player.${room}_2`;
 }
 
+// 🔥 Provider
 function detectProvider(imageUrl) {
   if (!imageUrl) return "Spotify";
 
@@ -76,7 +87,9 @@ function detectProvider(imageUrl) {
   return "Spotify";
 }
 
+// 🔥 Comando Alexa
 function buildAlexaCommand(title, artist, imageUrl) {
+
   const provider = detectProvider(imageUrl);
 
   if (title && artist) {
@@ -88,21 +101,6 @@ function buildAlexaCommand(title, artist, imageUrl) {
   }
 
   return null;
-}
-
-// ================= AUTH =================
-
-if (USERNAME && PASSWORD) {
-  app.use('/ma/latest-url', (req, res, next) => {
-    const credentials = auth(req);
-
-    if (!credentials || credentials.name !== USERNAME || credentials.pass !== PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="music-assistant-alexa-api"');
-      return res.status(401).send('Access denied');
-    }
-
-    next();
-  });
 }
 
 // ================= STREAM + PLAY =================
@@ -120,12 +118,14 @@ app.post('/ma/push-url', async (req, res) => {
 
   console.log("🎵 STREAM SALVATO:", obj);
 
-  const room = extractRoomFromStream(streamUrl);
-  const alexaDevice = buildAlexaEntity(room);
+  // 🔥 ESTRAZIONE + NORMALIZZAZIONE
+  const roomRaw = extractRoomFromStream(streamUrl);
+  const alexaDevice = buildAlexaEntity(roomRaw);
+
   const command = buildAlexaCommand(title, artist, imageUrl);
 
-  console.log(`➡️ Stanza: ${room}`);
-  console.log(`➡️ Device: ${alexaDevice}`);
+  console.log(`➡️ Stanza RAW: ${roomRaw}`);
+  console.log(`➡️ Device Alexa: ${alexaDevice}`);
   console.log(`➡️ Comando: ${command}`);
 
   if (!command) {
@@ -147,11 +147,12 @@ app.post('/ma/push-url', async (req, res) => {
       })
     });
 
-    const data = await response.text();
+    const text = await response.text();
 
-    console.log("✅ RISPOSTA HA:", data);
+    console.log(`📡 STATUS HA: ${response.status}`);
+    console.log("📡 RISPOSTA HA:", text);
 
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', ha_status: response.status });
 
   } catch (err) {
     console.error("❌ ERRORE:", err.message);
@@ -166,13 +167,6 @@ app.get('/ma/latest-url', (req, res) => {
     return res.status(404).json({ error: 'No URL available' });
   }
   res.json(obj);
-});
-
-// ================= CATCH ALL =================
-
-app.use((req, res) => {
-  console.log("⚠️ ROUTE NON GESTITA:", req.method, req.originalUrl);
-  res.status(404).json({ error: 'Not found' });
 });
 
 // ================= START =================
