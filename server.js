@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 // ================= CONFIG =================
 
 const HA_URL = 'https://valegabry.duckdns.org';
-const HA_TOKEN = 'INCOLLA_TOKEN';
+const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI0ZWYyNDE2NTZiODI0ZTJiYmIwYTU3NDhiNDRiODRjYiIsImlhdCI6MTc3NTU4ODY3MiwiZXhwIjoyMDkwOTQ4NjcyfQ.Bh8qH8Sy9C08KJ5VAdpJ2Q_Mlo1cokkss8ggAq1Jnl4';
 
 // ================= STATO =================
 
