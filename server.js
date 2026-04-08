@@ -64,10 +64,17 @@ function detectProvider(imageUrl) {
 }
 
 // 🔥 QUERY PULITA (IMPORTANTISSIMO)
-function buildSearchQuery(title, artist) {
+function buildSearchQuery(title, artist, album) {
+
   if (!title || !artist) return null;
 
-  return `${title} ${artist}`;
+  let query = `Riproduci ${title} di ${artist}`;
+
+  if (album) {
+    query += ` dall'album ${album}`;
+  }
+
+  return query;
 }
 
 // ================= MAIN =================
@@ -110,7 +117,7 @@ lastTime = now;
   const alexaDevice = buildAlexaEntity(roomRaw);
 
   const provider = detectProvider(imageUrl);
-  const query = buildSearchQuery(title, artist);
+  const query = buildSearchQuery(title, artist, album);
 
   console.log(`➡️ Device: ${alexaDevice}`);
   console.log(`➡️ Provider: ${provider}`);
@@ -118,18 +125,21 @@ lastTime = now;
 
   try {
 
-    const response = await fetch(`${HA_URL}/api/services/media_player/play_media`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${HA_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        entity_id: alexaDevice,
-        media_content_type: provider,
-        media_content_id: query
-      })
-    });
+// 🔥 piccolo delay per evitare errore Alexa
+await new Promise(resolve => setTimeout(resolve, 800));
+
+const response = await fetch(`${HA_URL}/api/services/media_player/play_media`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${HA_TOKEN}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    entity_id: alexaDevice,
+    media_content_type: provider,
+    media_content_id: query
+  })
+});
 
     const text = await response.text();
 
