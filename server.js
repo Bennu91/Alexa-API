@@ -50,28 +50,17 @@ function buildAlexaEntity(roomRaw) {
   return `media_player.${normalizeName(roomRaw)}_2`;
 }
 
-function detectProvider(imageUrl) {
-  if (!imageUrl) return "SPOTIFY";
-
-  const url = imageUrl.toLowerCase();
-
-  if (url.includes("apple_music")) return "APPLE_MUSIC";
-  if (url.includes("spotify")) return "SPOTIFY";
-  if (url.includes("amazon")) return "AMAZON_MUSIC";
-
-  return "SPOTIFY";
-}
-
-function buildSearchQuery(title, artist, album) {
+// 🔥 comando vocale (molto più preciso)
+function buildAlexaCommand(title, artist, album) {
   if (!title || !artist) return null;
 
-  let query = `Riproduci ${title} di ${artist}`;
+  let cmd = `Riproduci ${title} di ${artist}`;
 
   if (album) {
-    query += ` dall'album ${album}`;
+    cmd += ` dall'album ${album}`;
   }
 
-  return query;
+  return cmd;
 }
 
 // ================= MAIN =================
@@ -80,7 +69,6 @@ app.post('/ma/push-url', async (req, res) => {
 
   console.log("\n🎯 ===== NUOVA RICHIESTA MUSIC ASSISTANT =====");
 
-  // 🔥 LOG COMPLETI
   console.log("📦 BODY:", JSON.stringify(req.body, null, 2));
   console.log("🧾 RAW:", req.rawBody);
 
@@ -95,7 +83,6 @@ app.post('/ma/push-url', async (req, res) => {
       title = title || raw.title;
       artist = artist || raw.artist;
       album = album || raw.album;
-      imageUrl = imageUrl || raw.imageUrl;
     } catch (e) {
       console.log("⚠️ errore parsing raw");
     }
@@ -121,29 +108,28 @@ app.post('/ma/push-url', async (req, res) => {
   lastTrack = trackId;
   lastTime = now;
 
-  // costruzione
   const roomRaw = extractRoomFromStream(streamUrl);
   const alexaDevice = buildAlexaEntity(roomRaw);
 
-  const provider = detectProvider(imageUrl);
-  const query = buildSearchQuery(title, artist, album);
+  const command = buildAlexaCommand(title, artist, album);
 
   console.log(`➡️ Device: ${alexaDevice}`);
-  console.log(`➡️ Provider: ${provider}`);
-  console.log(`➡️ Query: ${query}`);
+  console.log(`➡️ Comando: ${command}`);
 
   try {
 
-    const response = await fetch(`${HA_URL}/api/services/media_player/play_media`, {
+    // piccolo delay anti errore Alexa
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const response = await fetch(`${HA_URL}/api/services/notify/alexa_media`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${HA_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        entity_id: alexaDevice,
-        media_content_type: provider,
-        media_content_id: query
+        target: [alexaDevice],
+        message: command
       })
     });
 
