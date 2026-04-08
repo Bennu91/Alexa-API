@@ -81,77 +81,49 @@ function buildSearchQuery(title, artist, album) {
 
 app.post('/ma/push-url', async (req, res) => {
 
-  console.log("\n🎯 ===== NUOVA RICHIESTA MUSIC ASSISTANT =====");
-
-  // 🔥 BODY COMPLETO
-  console.log("📦 BODY COMPLETO:");
-  console.log(JSON.stringify(req.body, null, 2));
-
-  // 🔥 RAW BODY
-  console.log("\n🧾 RAW BODY:");
-  console.log(req.rawBody);
-
-  // 🔥 ESTRAZIONE DATI
   let { streamUrl, title, artist, album, imageUrl } = req.body;
 
-  // 🔥 STREAM URL
-  console.log("\n🎵 STREAM URL:");
-  console.log(streamUrl);
-
-  // 🔥 ANALISI CAMPI
-  console.log("\n🔍 ANALISI CAMPI:");
-  Object.keys(req.body || {}).forEach(key => {
-    console.log(`- ${key}:`, req.body[key]);
-  }
-
-  // 🔥 fallback raw
+  // fallback raw
   if ((!title || !artist) && req.rawBody) {
     try {
       const raw = JSON.parse(req.rawBody);
       title = title || raw.title;
       artist = artist || raw.artist;
-      album = album || raw.album;
       imageUrl = imageUrl || raw.imageUrl;
-    } catch (e) {
-      console.log("⚠️ errore parsing raw");
-    }
+    } catch {}
   }
 
-  console.log("🎵 DATI:", { title, artist, album });
+  console.log("🎵 DATI:", { title, artist });
 
-  // 🔥 BLOCCO richieste senza metadata
-  if (!title || !artist) {
-    console.log("⛔ ignorata richiesta senza metadata");
-    return res.status(204).end();
-  }
+// 🔥 BLOCCO RICHIESTE SENZA METADATA (PRIMA CHIAMATA DI MA)
+if (!title || !artist) {
+  console.log("⛔ ignorata richiesta senza metadata");
+  return res.status(204).end(); // ancora più pulito
+}
 
-  // 🔥 BLOCCO duplicati
-  const now = Date.now();
-  const trackId = `${title}_${artist}`;
+// 🔥 BLOCCO DUPLICATI (MA spesso manda doppio)
+const now = Date.now();
+const trackId = `${title}_${artist}`;
 
-  if (lastTrack === trackId && (now - lastTime < 3000)) {
-    console.log("⛔ duplicato ignorato");
-    return res.status(204).end();
-  }
+if (lastTrack === trackId && (now - lastTime < 3000)) {
+  console.log("⛔ duplicato ignorato");
+  return res.status(204).end();
+}
 
-  lastTrack = trackId;
-  lastTime = now;
+lastTrack = trackId;
+lastTime = now;
 
-  // 🔥 costruzione device
   const roomRaw = extractRoomFromStream(streamUrl);
   const alexaDevice = buildAlexaEntity(roomRaw);
 
   const provider = detectProvider(imageUrl);
-  const query = buildSearchQuery(title, artist, album);
+  const query = buildSearchQuery(title, artist);
 
   console.log(`➡️ Device: ${alexaDevice}`);
   console.log(`➡️ Provider: ${provider}`);
   console.log(`➡️ Query: ${query}`);
 
   try {
-
-    // 🔥 delay anti errore Alexa
-    await new Promise(resolve => setTimeout(resolve, 800));
 
     const response = await fetch(`${HA_URL}/api/services/media_player/play_media`, {
       method: 'POST',
@@ -165,32 +137,6 @@ app.post('/ma/push-url', async (req, res) => {
         media_content_id: query
       })
     });
-
-    const text = await response.text();
-
-    console.log(`📡 STATUS: ${response.status}`);
-    console.log("📡 RISPOSTA:", text);
-
-    res.json({ status: 'ok' });
-
-  } catch (err) {
-    console.error("❌ ERRORE:", err.message);
-    res.status(500).json({ error: 'HA error' });
-  }
-});
-
-    const text = await response.text();
-
-    console.log(`📡 STATUS: ${response.status}`);
-    console.log("📡 RISPOSTA:", text);
-
-    res.json({ status: 'ok' });
-
-  } catch (err) {
-    console.error("❌ ERRORE:", err.message);
-    res.status(500).json({ error: 'HA error' });
-  }
-});
 
 // ================= START =================
 
