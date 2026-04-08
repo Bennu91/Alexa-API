@@ -6,9 +6,9 @@ const PORT = process.env.PORT || 3000;
 // ================= CONFIG =================
 
 const HA_URL = 'https://valegabry.duckdns.org';
-const HA_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI0ZWYyNDE2NTZiODI0ZTJiYmIwYTU3NDhiNDRiODRjYiIsImlhdCI6MTc3NTU4ODY3MiwiZXhwIjoyMDkwOTQ4NjcyfQ.Bh8qH8Sy9C08KJ5VAdpJ2Q_Mlo1cokkss8ggAq1Jnl4';
+const HA_TOKEN = 'INCOLLA_TOKEN';
 
-// ================= STATO (ANTI-DOPPIE CHIAMATE) =================
+// ================= STATO =================
 
 let lastTrack = null;
 let lastTime = 0;
@@ -50,7 +50,6 @@ function buildAlexaEntity(roomRaw) {
   return `media_player.${normalizeName(roomRaw)}_2`;
 }
 
-// 🔥 provider CORRETTO per Alexa
 function detectProvider(imageUrl) {
   if (!imageUrl) return "SPOTIFY";
 
@@ -63,9 +62,7 @@ function detectProvider(imageUrl) {
   return "SPOTIFY";
 }
 
-// 🔥 QUERY PULITA (IMPORTANTISSIMO)
 function buildSearchQuery(title, artist, album) {
-
   if (!title || !artist) return null;
 
   let query = `Riproduci ${title} di ${artist}`;
@@ -81,7 +78,15 @@ function buildSearchQuery(title, artist, album) {
 
 app.post('/ma/push-url', async (req, res) => {
 
+  console.log("\n🎯 ===== NUOVA RICHIESTA MUSIC ASSISTANT =====");
+
+  // 🔥 LOG COMPLETI
+  console.log("📦 BODY:", JSON.stringify(req.body, null, 2));
+  console.log("🧾 RAW:", req.rawBody);
+
   let { streamUrl, title, artist, album, imageUrl } = req.body;
+
+  console.log("🎵 STREAM URL:", streamUrl);
 
   // fallback raw
   if ((!title || !artist) && req.rawBody) {
@@ -89,35 +94,39 @@ app.post('/ma/push-url', async (req, res) => {
       const raw = JSON.parse(req.rawBody);
       title = title || raw.title;
       artist = artist || raw.artist;
+      album = album || raw.album;
       imageUrl = imageUrl || raw.imageUrl;
-    } catch {}
+    } catch (e) {
+      console.log("⚠️ errore parsing raw");
+    }
   }
 
-  console.log("🎵 DATI:", { title, artist });
+  console.log("🎵 DATI:", { title, artist, album });
 
-// 🔥 BLOCCO RICHIESTE SENZA METADATA (PRIMA CHIAMATA DI MA)
-if (!title || !artist) {
-  console.log("⛔ ignorata richiesta senza metadata");
-  return res.status(204).end(); // ancora più pulito
-}
+  // blocco metadata mancanti
+  if (!title || !artist) {
+    console.log("⛔ ignorata richiesta senza metadata");
+    return res.status(204).end();
+  }
 
-// 🔥 BLOCCO DUPLICATI (MA spesso manda doppio)
-const now = Date.now();
-const trackId = `${title}_${artist}`;
+  // blocco duplicati
+  const now = Date.now();
+  const trackId = `${title}_${artist}`;
 
-if (lastTrack === trackId && (now - lastTime < 3000)) {
-  console.log("⛔ duplicato ignorato");
-  return res.status(204).end();
-}
+  if (lastTrack === trackId && (now - lastTime < 3000)) {
+    console.log("⛔ duplicato ignorato");
+    return res.status(204).end();
+  }
 
-lastTrack = trackId;
-lastTime = now;
+  lastTrack = trackId;
+  lastTime = now;
 
+  // costruzione
   const roomRaw = extractRoomFromStream(streamUrl);
   const alexaDevice = buildAlexaEntity(roomRaw);
 
   const provider = detectProvider(imageUrl);
-  const query = buildSearchQuery(title, artist);
+  const query = buildSearchQuery(title, artist, album);
 
   console.log(`➡️ Device: ${alexaDevice}`);
   console.log(`➡️ Provider: ${provider}`);
@@ -137,6 +146,19 @@ lastTime = now;
         media_content_id: query
       })
     });
+
+    const text = await response.text();
+
+    console.log(`📡 STATUS: ${response.status}`);
+    console.log("📡 RISPOSTA:", text);
+
+    return res.json({ status: 'ok' });
+
+  } catch (err) {
+    console.error("❌ ERRORE:", err.message);
+    return res.status(500).json({ error: 'HA error' });
+  }
+});
 
 // ================= START =================
 
