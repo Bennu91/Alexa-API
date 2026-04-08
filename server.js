@@ -81,6 +81,27 @@ function buildSearchQuery(title, artist, album) {
 
 app.post('/ma/push-url', async (req, res) => {
 
+  console.log("\n🎯 ===== NUOVA RICHIESTA MUSIC ASSISTANT =====");
+
+  // 🔥 BODY COMPLETO
+  console.log("📦 BODY COMPLETO:");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  // 🔥 RAW BODY (importantissimo)
+  console.log("\n🧾 RAW BODY:");
+  console.log(req.rawBody);
+
+  // 🔥 STREAM URL
+  const { streamUrl } = req.body;
+  console.log("\n🎵 STREAM URL:");
+  console.log(streamUrl);
+
+  // 🔥 PROVA A TROVARE URL NASCOSTI
+  console.log("\n🔍 ANALISI CAMPI:");
+  Object.keys(req.body).forEach(key => {
+    console.log(`- ${key}:`, req.body[key]);
+  
+
   let { streamUrl, title, artist, album, imageUrl } = req.body;
 
   // fallback raw
