@@ -102,7 +102,7 @@ app.post('/ma/push-url', async (req, res) => {
   console.log("\n🔍 ANALISI CAMPI:");
   Object.keys(req.body || {}).forEach(key => {
     console.log(`- ${key}:`, req.body[key]);
-  });
+  }
 
   // 🔥 fallback raw
   if ((!title || !artist) && req.rawBody) {
