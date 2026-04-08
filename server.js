@@ -81,6 +81,8 @@ function buildSearchQuery(title, artist, album) {
 
 app.post('/ma/push-url', async (req, res) => {
 
+  let { streamUrl, title, artist, album, imageUrl } = req.body;
+
   console.log("\n🎯 ===== NUOVA RICHIESTA MUSIC ASSISTANT =====");
 
   // 🔥 BODY COMPLETO
@@ -100,9 +102,6 @@ app.post('/ma/push-url', async (req, res) => {
   console.log("\n🔍 ANALISI CAMPI:");
   Object.keys(req.body).forEach(key => {
     console.log(`- ${key}:`, req.body[key]);
-  
-
-  let { streamUrl, title, artist, album, imageUrl } = req.body;
 
   // fallback raw
   if ((!title || !artist) && req.rawBody) {
