@@ -30,7 +30,9 @@ function logRequest(req) {
   console.log("METHOD:", req.method);
   console.log("URL:", req.originalUrl);
   console.log("HEADERS:\n", JSON.stringify(req.headers, null, 2));
-  console.log("BODY:\n", JSON.stringify(req.body, null, 2));
+  console.log("QUERY:\n", JSON.stringify(req.query, null, 2));
+  console.log("BODY PARSED:\n", JSON.stringify(req.body, null, 2));
+  console.log("BODY RAW:\n", req.rawBody);
   console.log("===========================================\n");
 }
 
@@ -42,12 +44,15 @@ app.use((req, res, next) => {
 // ================= VAR =================
 
 let obj = null;
-let lastUpdate = null;
+let prevObj = null; // 🔥 NUOVO
 
-// ================= AUTH =================
+let lastIntent = null;
+let intentHistory = [];
+
+// ================= AUTH SOLO STREAM =================
 
 if (USERNAME && PASSWORD) {
-  app.use('/ma', (req, res, next) => {
+  app.use('/ma/latest-url', (req, res, next) => {
     const credentials = auth(req);
 
     if (!credentials || credentials.name !== USERNAME || credentials.pass !== PASSWORD) {
@@ -58,6 +63,58 @@ if (USERNAME && PASSWORD) {
     next();
   });
 }
+
+// ================= INTENTS =================
+
+app.all(['/alexa/intents', '/alexa/intents/'], (req, res) => {
+
+  let intent = null;
+  let slots = {};
+
+  if (req.body && typeof req.body === 'object') {
+    intent = req.body.intent || req.body.name || null;
+    slots = req.body.slots || {};
+  }
+
+  if (!intent && req.query.intent) {
+    intent = req.query.intent;
+
+    try {
+      slots = req.query.slots ? JSON.parse(req.query.slots) : {};
+    } catch {
+      slots = {};
+    }
+  }
+
+  if (!intent) {
+    console.log("⚠️ NESSUN INTENT TROVATO");
+    return res.status(200).json({ status: 'no_intent_but_logged' });
+  }
+
+  lastIntent = {
+    intent,
+    slots,
+    time: new Date().toISOString(),
+    method: req.method
+  };
+
+  intentHistory.push(lastIntent);
+  if (intentHistory.length > 50) intentHistory.shift();
+
+  console.log("✅ INTENT RICEVUTO:", lastIntent);
+
+  res.json({ status: 'ok' });
+});
+
+// ================= DEBUG =================
+
+app.get('/alexa/latest-intent', (req, res) => {
+  res.json(lastIntent || {});
+});
+
+app.get('/alexa/intents/history', (req, res) => {
+  res.json(intentHistory);
+});
 
 // ================= STREAM =================
 
@@ -70,15 +127,16 @@ app.post('/ma/push-url', (req, res) => {
     return res.status(400).json({ error: 'Missing streamUrl' });
   }
 
-  obj = { streamUrl, title, artist, album, imageUrl };
-  lastUpdate = Date.now();
+  // 🔥 salva precedente
+  prevObj = obj;
 
-  console.log("🎵 STREAM AGGIORNATO:", title);
+  obj = { streamUrl, title, artist, album, imageUrl };
+
+  console.log("🎵 STREAM SALVATO:", obj);
 
   res.json({ status: 'ok' });
 });
 
-// 🔥 invariato (fondamentale per Alexa)
 app.get('/ma/latest-url', (req, res) => {
   if (!obj) {
     return res.status(404).json({ error: 'No URL available' });
@@ -87,14 +145,20 @@ app.get('/ma/latest-url', (req, res) => {
   res.json(obj);
 });
 
-// ================= DEBUG (NUOVO ma innocuo) =================
+// 🔥 NUOVO NEXT (usa ultimo stream ricevuto)
+app.get('/ma/next', (req, res) => {
+  if (!obj) {
+    return res.status(404).json({ error: 'No next track' });
+  }
+  res.json(obj);
+});
 
-app.get('/ma/debug', (req, res) => {
-  res.json({
-    hasStream: !!obj,
-    lastUpdate,
-    track: obj || null
-  });
+// 🔥 NUOVO PREVIOUS
+app.get('/ma/previous', (req, res) => {
+  if (!prevObj) {
+    return res.status(404).json({ error: 'No previous track' });
+  }
+  res.json(prevObj);
 });
 
 // ================= CATCH ALL =================
@@ -107,5 +171,5 @@ app.use((req, res) => {
 // ================= START =================
 
 app.listen(PORT, () => {
-  console.log(`🚀 API attiva sulla porta ${PORT}`);
+  console.log(`🚀 DEBUG API attiva sulla porta ${PORT}`);
 });
