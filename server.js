@@ -6,92 +6,102 @@ const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.USERNAME;
 const PASSWORD = process.env.PASSWORD;
 
-// ================= BODY =================
+// ================= RAW BODY =================
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+
+app.use(express.urlencoded({
+  extended: true,
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+
+// ================= LOGGER =================
+
+function logRequest(req) {
+  console.log("\n================= REQUEST =================");
+  console.log("TIME:", new Date().toISOString());
+  console.log("IP:", req.ip);
+  console.log("METHOD:", req.method);
+  console.log("URL:", req.originalUrl);
+  console.log("HEADERS:\n", JSON.stringify(req.headers, null, 2));
+  console.log("BODY:\n", JSON.stringify(req.body, null, 2));
+  console.log("===========================================\n");
+}
+
+app.use((req, res, next) => {
+  logRequest(req);
+  next();
+});
+
+// ================= VAR =================
+
+let obj = null;
+let lastUpdate = null;
 
 // ================= AUTH =================
 
 if (USERNAME && PASSWORD) {
   app.use('/ma', (req, res, next) => {
     const credentials = auth(req);
+
     if (!credentials || credentials.name !== USERNAME || credentials.pass !== PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="music-assistant"');
+      res.set('WWW-Authenticate', 'Basic realm="music-assistant-alexa-api"');
       return res.status(401).send('Access denied');
     }
+
     next();
   });
 }
 
-// ================= STATE =================
-
-let queue = [];
-let currentIndex = 0;
-
-// ================= PUSH TRACK =================
+// ================= STREAM =================
 
 app.post('/ma/push-url', (req, res) => {
-  const track = req.body;
 
-  if (!track.streamUrl) {
+  const { streamUrl, title, artist, album, imageUrl } = req.body;
+
+  if (!streamUrl) {
+    console.log("❌ STREAM NON VALIDO");
     return res.status(400).json({ error: 'Missing streamUrl' });
   }
 
-  // 🔥 NUOVA LOGICA:
-  // se arriva un nuovo brano mentre sei all’ultimo → append
-  // se sei in mezzo → reset queue (nuovo contesto)
+  obj = { streamUrl, title, artist, album, imageUrl };
+  lastUpdate = Date.now();
 
-  if (currentIndex < queue.length - 1) {
-    queue = [];
-    currentIndex = 0;
-  }
-
-  queue.push(track);
-
-  console.log("🎵 TRACK AGGIUNTA:", track.title);
+  console.log("🎵 STREAM AGGIORNATO:", title);
 
   res.json({ status: 'ok' });
 });
 
-// ================= GET CURRENT =================
-
-app.get('/ma/current', (req, res) => {
-  if (!queue.length) {
-    return res.status(404).json({ error: 'No track' });
+// 🔥 invariato (fondamentale per Alexa)
+app.get('/ma/latest-url', (req, res) => {
+  if (!obj) {
+    return res.status(404).json({ error: 'No URL available' });
   }
 
-  res.json(queue[currentIndex]);
+  res.json(obj);
 });
 
-// ================= NEXT =================
-
-app.get('/ma/next', (req, res) => {
-  if (currentIndex < queue.length - 1) {
-    currentIndex++;
-  }
-
-  res.json(queue[currentIndex]);
-});
-
-// ================= PREVIOUS =================
-
-app.get('/ma/previous', (req, res) => {
-  if (currentIndex > 0) {
-    currentIndex--;
-  }
-
-  res.json(queue[currentIndex]);
-});
-
-// ================= DEBUG =================
+// ================= DEBUG (NUOVO ma innocuo) =================
 
 app.get('/ma/debug', (req, res) => {
   res.json({
-    queueLength: queue.length,
-    currentIndex,
-    currentTrack: queue[currentIndex] || null
+    hasStream: !!obj,
+    lastUpdate,
+    track: obj || null
   });
+});
+
+// ================= CATCH ALL =================
+
+app.use((req, res) => {
+  console.log("⚠️ ROUTE NON GESTITA:", req.method, req.originalUrl);
+  res.status(404).json({ error: 'Not found but logged' });
 });
 
 // ================= START =================
