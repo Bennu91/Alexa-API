@@ -6,156 +6,96 @@ const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.USERNAME;
 const PASSWORD = process.env.PASSWORD;
 
-// ================= RAW BODY (FONDAMENTALE) =================
+// ================= BODY =================
 
-app.use(express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use(express.urlencoded({
-  extended: true,
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
-
-// ================= LOGGER SUPER DETTAGLIATO =================
-
-function logRequest(req) {
-  console.log("\n================= REQUEST =================");
-  console.log("TIME:", new Date().toISOString());
-  console.log("IP:", req.ip);
-  console.log("METHOD:", req.method);
-  console.log("URL:", req.originalUrl);
-  console.log("HEADERS:\n", JSON.stringify(req.headers, null, 2));
-  console.log("QUERY:\n", JSON.stringify(req.query, null, 2));
-  console.log("BODY PARSED:\n", JSON.stringify(req.body, null, 2));
-  console.log("BODY RAW:\n", req.rawBody);
-  console.log("===========================================\n");
-}
-
-// 🔥 LOGGA TUTTE LE RICHIESTE (anche quelle che non matchano route)
-app.use((req, res, next) => {
-  logRequest(req);
-  next();
-});
-
-// ================= VAR =================
-
-let obj = null;
-let lastIntent = null;
-let intentHistory = [];
-
-// ================= AUTH SOLO STREAM =================
+// ================= AUTH =================
 
 if (USERNAME && PASSWORD) {
-  app.use('/ma/latest-url', (req, res, next) => {
+  app.use('/ma', (req, res, next) => {
     const credentials = auth(req);
-
     if (!credentials || credentials.name !== USERNAME || credentials.pass !== PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="music-assistant-alexa-api"');
+      res.set('WWW-Authenticate', 'Basic realm="music-assistant"');
       return res.status(401).send('Access denied');
     }
-
     next();
   });
 }
 
-// ================= INTENTS =================
+// ================= STATE =================
 
-// 🔥 QUALSIASI METODO (GET, POST, PUT, ecc)
-app.all(['/alexa/intents', '/alexa/intents/'], (req, res) => {
+let queue = [];
+let currentIndex = 0;
 
-  let intent = null;
-  let slots = {};
+// ================= PUSH TRACK =================
 
-  // prova body
-  if (req.body && typeof req.body === 'object') {
-    intent = req.body.intent || req.body.name || null;
-    slots = req.body.slots || {};
+app.post('/ma/push-url', (req, res) => {
+  const track = req.body;
+
+  if (!track.streamUrl) {
+    return res.status(400).json({ error: 'Missing streamUrl' });
   }
 
-  // fallback query
-  if (!intent && req.query.intent) {
-    intent = req.query.intent;
+  // 🔥 NUOVA LOGICA:
+  // se arriva un nuovo brano mentre sei all’ultimo → append
+  // se sei in mezzo → reset queue (nuovo contesto)
 
-    try {
-      slots = req.query.slots ? JSON.parse(req.query.slots) : {};
-    } catch {
-      slots = {};
-    }
+  if (currentIndex < queue.length - 1) {
+    queue = [];
+    currentIndex = 0;
   }
 
-  if (!intent) {
-    console.log("⚠️ NESSUN INTENT TROVATO");
-    return res.status(200).json({ status: 'no_intent_but_logged' });
-  }
+  queue.push(track);
 
-  lastIntent = {
-    intent,
-    slots,
-    time: new Date().toISOString(),
-    method: req.method
-  };
-
-  intentHistory.push(lastIntent);
-  if (intentHistory.length > 50) intentHistory.shift();
-
-  console.log("✅ INTENT RICEVUTO:", lastIntent);
+  console.log("🎵 TRACK AGGIUNTA:", track.title);
 
   res.json({ status: 'ok' });
+});
+
+// ================= GET CURRENT =================
+
+app.get('/ma/current', (req, res) => {
+  if (!queue.length) {
+    return res.status(404).json({ error: 'No track' });
+  }
+
+  res.json(queue[currentIndex]);
+});
+
+// ================= NEXT =================
+
+app.get('/ma/next', (req, res) => {
+  if (currentIndex < queue.length - 1) {
+    currentIndex++;
+  }
+
+  res.json(queue[currentIndex]);
+});
+
+// ================= PREVIOUS =================
+
+app.get('/ma/previous', (req, res) => {
+  if (currentIndex > 0) {
+    currentIndex--;
+  }
+
+  res.json(queue[currentIndex]);
 });
 
 // ================= DEBUG =================
 
-// ultimo intent
-app.get('/alexa/latest-intent', (req, res) => {
-  res.json(lastIntent || {});
-});
-
-// storico completo
-app.get('/alexa/intents/history', (req, res) => {
-  res.json(intentHistory);
-});
-
-// ================= STREAM =================
-
-app.post('/ma/push-url', (req, res) => {
-
-  const { streamUrl, title, artist, album, imageUrl } = req.body;
-
-  if (!streamUrl) {
-    console.log("❌ STREAM NON VALIDO");
-    return res.status(400).json({ error: 'Missing streamUrl' });
-  }
-
-  obj = { streamUrl, title, artist, album, imageUrl };
-
-  console.log("🎵 STREAM SALVATO:", obj);
-
-  res.json({ status: 'ok' });
-});
-
-app.get('/ma/latest-url', (req, res) => {
-  if (!obj) {
-    return res.status(404).json({ error: 'No URL available' });
-  }
-
-  res.json(obj);
-});
-
-// ================= CATCH ALL (IMPORTANTISSIMO) =================
-
-// 🔥 intercetta QUALSIASI altra chiamata (tipo quelle che ora perdi)
-app.use((req, res) => {
-  console.log("⚠️ ROUTE NON GESTITA:", req.method, req.originalUrl);
-  res.status(404).json({ error: 'Not found but logged' });
+app.get('/ma/debug', (req, res) => {
+  res.json({
+    queueLength: queue.length,
+    currentIndex,
+    currentTrack: queue[currentIndex] || null
+  });
 });
 
 // ================= START =================
 
 app.listen(PORT, () => {
-  console.log(`🚀 DEBUG API attiva sulla porta ${PORT}`);
+  console.log(`🚀 API attiva sulla porta ${PORT}`);
 });
