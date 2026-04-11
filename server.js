@@ -169,9 +169,9 @@ app.post('/ma/push-url', (req, res) => {
   title,
   artist,
   album,
-  imageUrl,
-  image: imageUrl,       // 🔥 AGGIUNGI
-  artwork: imageUrl      // 🔥 AGGIUNGI
+  imageUrl: fixedImage || imageUrl,
+  image: fixedImage || imageUrl,       // 🔥 AGGIUNGI
+  artwork: fixedImage || imageUrl      // 🔥 AGGIUNGI
   };
 
   console.log("🎵 STREAM SALVATO:", obj);
