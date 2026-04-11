@@ -41,6 +41,38 @@ app.use((req, res, next) => {
   next();
 });
 
+function extractDirectImageUrl(proxyUrl) {
+  try {
+    if (!proxyUrl) return null;
+
+    const url = new URL(proxyUrl);
+    let path = url.searchParams.get('path');
+
+    if (!path) return null;
+
+    for (let i = 0; i < 5; i++) {
+      try {
+        path = decodeURIComponent(path);
+      } catch (e) {
+        break;
+      }
+
+      if (path.startsWith('http')) break;
+    }
+
+    if (!path.startsWith('http')) return null;
+
+    // riduzione dimensione Apple
+    path = path.replace(/\/1000x1000bb\.jpg$/, '/500x500bb.jpg');
+
+    return path;
+
+  } catch (e) {
+    console.log("IMAGE FIX ERROR:", e);
+    return null;
+  }
+}
+
 // ================= VAR =================
 
 let obj = null;
@@ -130,7 +162,15 @@ app.post('/ma/push-url', (req, res) => {
   // 🔥 salva precedente
   prevObj = obj;
 
-  obj = { streamUrl, title, artist, album, imageUrl };
+  const fixedImage = extractDirectImageUrl(imageUrl);
+  
+  obj = {
+    streamUrl,
+    title,
+    artist,
+    album,
+    imageUrl: fixedImage || imageUrl
+  };
 
   console.log("🎵 STREAM SALVATO:", obj);
 
