@@ -165,11 +165,13 @@ app.post('/ma/push-url', (req, res) => {
   const fixedImage = extractDirectImageUrl(imageUrl);
   
   obj = {
-    streamUrl,
-    title,
-    artist,
-    album,
-    imageUrl: fixedImage || imageUrl
+  streamUrl,
+  title,
+  artist,
+  album,
+  imageUrl,
+  image: imageUrl,       // 🔥 AGGIUNGI
+  artwork: imageUrl      // 🔥 AGGIUNGI
   };
 
   console.log("🎵 STREAM SALVATO:", obj);
